@@ -51,6 +51,11 @@ public class AutomatedSortingCellTwin : MonoBehaviour
     private bool queueNextDefect = false;
     private string nextDefectType = "Surface";
 
+    [Header("Fault & Jam Detection")]
+    public bool isJammed = false;
+    public string jamFaultMessage = "";
+    private float jamBlinkTimer = 0f;
+
     // --- Workpiece Tracking ---
     public class Workpiece
     {
@@ -64,6 +69,9 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         public bool processed;
         public Vector3 velocity;
         public Renderer renderer;
+        public float lastX;
+        public float stallTimer;
+        public Vector3 nominalSize;
     }
 
     private readonly List<Workpiece> activeWorkpieces = new List<Workpiece>();
@@ -160,7 +168,39 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         HandleCameraControls();
         HandleWorkpieceRaycast();
 
-        if (isRunning && !isEmergencyStopped)
+        // Operator Keyboard Shortcuts
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            if (isJammed) ClearJamAndRecover();
+            else isRunning = !isRunning;
+        }
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            isEmergencyStopped = !isEmergencyStopped;
+            if (isEmergencyStopped) isRunning = false;
+        }
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            ClearJamAndRecover();
+        }
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            ResetCell();
+        }
+        if (Input.GetKeyDown(KeyCode.J))
+        {
+            // Test inject a workpiece stall to verify jam detection
+            if (activeWorkpieces.Count > 0)
+            {
+                TriggerJamFault($"SIMULATED WORKPIECE STALL FAULT: Conveyor jam at X={activeWorkpieces[0].gameObject.transform.position.x:F1}m");
+            }
+            else
+            {
+                TriggerJamFault("SIMULATED CONVEYOR STALL FAULT: Mechanical drive stall detected on Line 01");
+            }
+        }
+
+        if (isRunning && !isEmergencyStopped && !isJammed)
         {
             // Spawning
             spawnTimer += Time.deltaTime;
@@ -233,7 +273,7 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         GameObject root = new GameObject("Cell_Structures");
         root.transform.SetParent(transform);
 
-        // 1. Foundation Base (Omitted to prevent Z-fighting with realvirtual factory floor)
+        // 1. Foundation Base (Omitted to prevent Z-fighting with factory floor)
         // Conveyor legs rest directly on the factory floor plane.
 
         // 2. Main Infeed Conveyor Line (-5.8 to +5.2 along X)
@@ -491,7 +531,22 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         string serial = $"WP-60{totalSpawned:D3}";
 
         bool isDefect = forceDefect || queueNextDefect || (UnityEngine.Random.value < defectProbability);
-        string defect = isDefect ? (string.IsNullOrEmpty(specificDefect) ? (queueNextDefect ? nextDefectType : "Surface Flaw") : specificDefect) : "None";
+        string defect = "None";
+        if (isDefect)
+        {
+            if (!string.IsNullOrEmpty(specificDefect))
+                defect = specificDefect;
+            else if (queueNextDefect)
+                defect = nextDefectType;
+            else
+            {
+                float roll = UnityEngine.Random.value;
+                if (roll < 0.40f) defect = "Dimension (Over-Height)";
+                else if (roll < 0.65f) defect = "Dimension (Out-of-Tolerance)";
+                else if (roll < 0.85f) defect = "Surface Flaw (Scratch)";
+                else defect = "Surface Contamination";
+            }
+        }
         queueNextDefect = false;
 
         float quality = isDefect ? UnityEngine.Random.Range(0.25f, 0.68f) : UnityEngine.Random.Range(0.92f, 0.99f);
@@ -500,9 +555,25 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         boxObj.name = $"Workpiece_{serial}";
         boxObj.transform.SetParent(transform);
 
-        // Size: machined billet 0.45 x 0.22 x 0.45
-        float sizeY = isDefect && defect.Contains("Dimension") ? 0.32f : 0.22f;
-        boxObj.transform.localScale = new Vector3(0.42f, sizeY, 0.42f);
+        // Size: nominal machined billet 0.42 x 0.22 x 0.42
+        float sizeX = 0.42f;
+        float sizeY = 0.22f;
+        float sizeZ = 0.42f;
+
+        if (isDefect && defect.Contains("Dimension"))
+        {
+            if (defect.Contains("Over-Height"))
+            {
+                sizeY = 0.35f; // 59% over-height (exceeds nominal 0.22m)
+            }
+            else
+            {
+                sizeY = 0.32f;
+                sizeX = 0.48f; // oversized profile
+            }
+        }
+
+        boxObj.transform.localScale = new Vector3(sizeX, sizeY, sizeZ);
         boxObj.transform.position = new Vector3(InfeedStartX, 0.70f + (sizeY * 0.5f), 0f);
 
         Renderer rend = boxObj.GetComponent<Renderer>();
@@ -527,7 +598,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
             rejected = false,
             processed = false,
             velocity = new Vector3(conveyorSpeed, 0f, 0f),
-            renderer = rend
+            renderer = rend,
+            nominalSize = new Vector3(sizeX, sizeY, sizeZ),
+            lastX = InfeedStartX,
+            stallTimer = 0f
         };
 
         activeWorkpieces.Add(wp);
@@ -573,7 +647,14 @@ public class AutomatedSortingCellTwin : MonoBehaviour
                 visionSensorActive = true;
             }
 
-            // 3. Pusher Sorting Station Interaction
+            // 3. Scan Bypass Fault Check: Workpiece moved past the inspection station without being scanned
+            if (!wp.inspected && !wp.rejected && pos.x > (VisionScannerX + 0.55f))
+            {
+                TriggerJamFault($"SCAN BYPASS FAULT: Workpiece {wp.serialId} bypassed optical inspection without scan at X={pos.x:F1}m");
+                return;
+            }
+
+            // 4. Pusher Sorting Station Interaction
             if (wp.inspected && wp.isDefective && !wp.rejected)
             {
                 // In sorting window
@@ -589,7 +670,7 @@ public class AutomatedSortingCellTwin : MonoBehaviour
                 }
             }
 
-            // Physical movement
+            // 5. Kinematic movement & stall detection
             if (wp.rejected)
             {
                 // Sliding down the reject chute into the scrap tote
@@ -608,7 +689,6 @@ public class AutomatedSortingCellTwin : MonoBehaviour
                         rejectCount++;
                     }
 
-                    // Keep in tote for a moment, then cleanup
                     if (pos.x < PusherStationX + 0.1f)
                     {
                         wp.velocity = Vector3.zero;
@@ -617,9 +697,29 @@ public class AutomatedSortingCellTwin : MonoBehaviour
             }
             else
             {
-                // Normal conveyor transport along +X
+                // Normal conveyor transport along +X (Kinematic advance)
                 pos.x += conveyorSpeed * Time.deltaTime;
                 wp.gameObject.transform.position = pos;
+
+                // Stall detection: If conveyor is running but workpiece is not advancing
+                if (conveyorSpeed > 0.1f && pos.x <= PassEndX)
+                {
+                    float advance = pos.x - wp.lastX;
+                    if (advance < (conveyorSpeed * 0.05f * Time.deltaTime))
+                    {
+                        wp.stallTimer += Time.deltaTime;
+                        if (wp.stallTimer >= 2.0f)
+                        {
+                            TriggerJamFault($"WORKPIECE STALL FAULT: Workpiece {wp.serialId} stalled on conveyor at X={pos.x:F1}m");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        wp.stallTimer = 0f;
+                        wp.lastX = pos.x;
+                    }
+                }
 
                 // Passed outfeed collection buffer
                 if (pos.x >= PassEndX + 1.8f)
@@ -645,6 +745,97 @@ public class AutomatedSortingCellTwin : MonoBehaviour
                 activeWorkpieces.RemoveAt(i);
             }
         }
+    }
+
+    // =========================================================================
+    // FAULT MANAGEMENT, JAM RECOVERY & CELL RESET
+    // =========================================================================
+
+    public void TriggerJamFault(string message)
+    {
+        isJammed = true;
+        jamFaultMessage = message;
+        isRunning = false;
+        currentAndonState = AndonState.Red;
+        UpdateAndonStackLight();
+        UpdateDashboardUI();
+        Debug.LogWarning($"[SortingCellTwin Fault] {message}");
+    }
+
+    public void ClearJamAndRecover()
+    {
+        // Remove stalled/uninspected workpieces that caused the jam
+        for (int i = activeWorkpieces.Count - 1; i >= 0; i--)
+        {
+            Workpiece wp = activeWorkpieces[i];
+            if (wp.stallTimer >= 1.2f || (!wp.inspected && wp.gameObject != null && wp.gameObject.transform.position.x > (VisionScannerX + 0.35f)))
+            {
+                if (selectedWorkpiece == wp) selectedWorkpiece = null;
+                if (wp.gameObject != null) Destroy(wp.gameObject);
+                activeWorkpieces.RemoveAt(i);
+            }
+        }
+
+        isJammed = false;
+        jamFaultMessage = "";
+        isEmergencyStopped = false;
+        isRunning = true;
+        currentAndonState = AndonState.Green;
+
+        UpdateAndonStackLight();
+        UpdateDashboardUI();
+        Debug.Log("[SortingCellTwin] Jam fault cleared. System recovered to safe ready state.");
+    }
+
+    public void ResetCell()
+    {
+        // Clear all in-flight workpieces and tote bins
+        for (int i = activeWorkpieces.Count - 1; i >= 0; i--)
+        {
+            if (activeWorkpieces[i].gameObject != null)
+            {
+                Destroy(activeWorkpieces[i].gameObject);
+            }
+        }
+        activeWorkpieces.Clear();
+        selectedWorkpiece = null;
+
+        // Reset counters and metrics
+        totalSpawned = 0;
+        passCount = 0;
+        rejectCount = 0;
+        spawnTimer = 0f;
+
+        // Reset actuator state to fully retracted
+        pusherTimer = -1f;
+        pusherCurrentStroke = 0f;
+        isPusherExtending = false;
+        if (pusherRodTransform != null)
+            pusherRodTransform.localPosition = new Vector3(PusherStationX, 0.88f, 0.95f);
+        if (pusherPaddleTransform != null)
+            pusherPaddleTransform.localPosition = new Vector3(PusherStationX, 0.88f, 0.54f);
+
+        // Clear all faults and jams
+        isJammed = false;
+        jamFaultMessage = "";
+        isEmergencyStopped = false;
+
+        // Resume line in nominal operating state
+        isRunning = true;
+        currentAndonState = AndonState.Green;
+
+        UpdateAndonStackLight();
+        UpdateDashboardUI();
+        Debug.Log("[SortingCellTwin] Cell reset complete: workpieces cleared, counters reset, actuator homed, line resumed.");
+    }
+
+    public void ResetCountersOnly()
+    {
+        totalSpawned = 0;
+        passCount = 0;
+        rejectCount = 0;
+        UpdateDashboardUI();
+        Debug.Log("[SortingCellTwin] Counters reset to zero.");
     }
 
     // =========================================================================
@@ -737,9 +928,15 @@ public class AutomatedSortingCellTwin : MonoBehaviour
 
     private void UpdateAndonStackLight()
     {
-        bool redOn = isEmergencyStopped;
-        bool amberOn = !isEmergencyStopped && (pusherTimer >= 0f || visionSensorActive);
-        bool greenOn = !isEmergencyStopped && isRunning && !amberOn;
+        bool redOn = isEmergencyStopped || isJammed;
+        if (isJammed)
+        {
+            jamBlinkTimer += Time.deltaTime * 6f;
+            redOn = Mathf.FloorToInt(jamBlinkTimer) % 2 == 0;
+        }
+
+        bool amberOn = !isEmergencyStopped && !isJammed && (pusherTimer >= 0f || visionSensorActive || !isRunning);
+        bool greenOn = !isEmergencyStopped && !isJammed && isRunning && (pusherTimer < 0f && !visionSensorActive);
 
         SetLightSegment(andonRedMat, andonRedLight, redOn, new Color(1f, 0.1f, 0.1f));
         SetLightSegment(andonAmberMat, andonAmberLight, amberOn, new Color(1f, 0.7f, 0.05f));
@@ -830,7 +1027,7 @@ public class AutomatedSortingCellTwin : MonoBehaviour
 
     private void HandleCameraControls()
     {
-        // If realvirtual's own SceneMouseNavigation is active on the camera, yield control to prevent jitter/fighting
+        // If an external camera controller is present, yield mouse drag controls
         if (mainCamera != null && mainCamera.GetComponent("SceneMouseNavigation") != null)
             return;
 
@@ -900,11 +1097,11 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         }
 
         // Main SCADA Monitoring Glass Panel
-        GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(28, -28), new Vector2(420, 680), new Color(0.06f, 0.08f, 0.11f, 0.94f));
+        GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(28, -28), new Vector2(420, 715), new Color(0.06f, 0.08f, 0.11f, 0.94f));
 
         // Header Title
         CreateUILabel("HeaderTitle", panel.transform, "DIGITAL TWIN  /  SORTING CELL", 20, -22, 380, 32, 20, true, Color.white);
-        CreateUILabel("HeaderSub", panel.transform, "REALVIRTUAL.IO MCP INTEGRATION  |  LINE 01", 20, -54, 380, 20, 12, false, new Color(0.2f, 0.85f, 1f));
+        CreateUILabel("HeaderSub", panel.transform, "STANDALONE C# SIMULATION  |  CELL 01", 20, -54, 380, 20, 12, false, new Color(0.2f, 0.85f, 1f));
 
         // Andon Light Mini Indicator in UI
         GameObject andonGroup = CreateUIBox("AndonLEDs", panel.transform, new Vector2(300, -22), new Vector2(90, 30), new Color(0.12f, 0.15f, 0.18f));
@@ -913,7 +1110,7 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         uiAndonGreenLed = CreateUICircle("GreenLED", andonGroup.transform, new Vector2(74, -15), 18, Color.green);
 
         // Status Banner
-        uiStatusText = CreateUILabel("StatusText", panel.transform, "SYSTEM STATUS", 20, -90, 380, 34, 18, true, Color.green);
+        uiStatusText = CreateUILabel("StatusText", panel.transform, "SYSTEM STATUS", 20, -90, 380, 34, 16, true, Color.green);
 
         // Production KPI Panel Section
         uiKpiText = CreateUILabel("KpiText", panel.transform, "KPIS LOADING...", 20, -135, 380, 140, 14, false, Color.white);
@@ -923,37 +1120,37 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         uiPusherGauge = CreateProgressBar("PusherGauge", panel.transform, new Vector2(20, -310), new Vector2(380, 14));
 
         // Sensor Live Signals
-        uiSensorText = CreateUILabel("SensorSignals", panel.transform, "SENSORS", 20, -340, 380, 70, 13, false, new Color(0.8f, 0.9f, 1f));
+        uiSensorText = CreateUILabel("SensorSignals", panel.transform, "SENSORS", 20, -335, 380, 75, 12, false, new Color(0.8f, 0.9f, 1f));
 
         // Selected Workpiece Telemetry Card
-        uiSelectedPartText = CreateUILabel("SelectedPart", panel.transform, "Click a part to view pedigree", 20, -425, 380, 85, 13, false, new Color(0.95f, 0.8f, 0.4f));
+        uiSelectedPartText = CreateUILabel("SelectedPart", panel.transform, "Click a part to view pedigree", 20, -420, 380, 85, 13, false, new Color(0.95f, 0.8f, 0.4f));
 
-        // Control Buttons
-        float btnY = -525;
-        CreateUIButton("BtnRun", panel.transform, "RUN", new Vector2(20, btnY), new Vector2(85, 38), new Color(0.1f, 0.55f, 0.35f), () =>
+        // Row 1: Line Operations
+        float btnY = -518;
+        CreateUIButton("BtnRun", panel.transform, "RUN", new Vector2(20, btnY), new Vector2(85, 34), new Color(0.1f, 0.55f, 0.35f), () =>
         {
-            isRunning = true;
-            isEmergencyStopped = false;
+            if (isJammed) ClearJamAndRecover();
+            else { isRunning = true; isEmergencyStopped = false; }
         });
 
-        CreateUIButton("BtnPause", panel.transform, "PAUSE", new Vector2(115, btnY), new Vector2(85, 38), new Color(0.45f, 0.35f, 0.15f), () =>
+        CreateUIButton("BtnPause", panel.transform, "PAUSE", new Vector2(115, btnY), new Vector2(85, 34), new Color(0.45f, 0.35f, 0.15f), () =>
         {
             isRunning = false;
         });
 
-        CreateUIButton("BtnDefect", panel.transform, "+ DEFECT", new Vector2(210, btnY), new Vector2(95, 38), new Color(0.65f, 0.25f, 0.15f), () =>
+        CreateUIButton("BtnClearJam", panel.transform, "CLEAR JAM", new Vector2(210, btnY), new Vector2(95, 34), new Color(0.85f, 0.45f, 0.1f), () =>
         {
-            queueNextDefect = true;
-            nextDefectType = "Surface Flaw";
+            ClearJamAndRecover();
         });
 
-        CreateUIButton("BtnPush", panel.transform, "ACTUATE", new Vector2(315, btnY), new Vector2(85, 38), new Color(0.2f, 0.45f, 0.65f), () =>
+        CreateUIButton("BtnEStop", panel.transform, "E-STOP", new Vector2(315, btnY), new Vector2(85, 34), new Color(0.75f, 0.12f, 0.12f), () =>
         {
-            TriggerPusherActuation();
+            isEmergencyStopped = !isEmergencyStopped;
+            if (isEmergencyStopped) isRunning = false;
         });
 
-        // Second Row: Speed & Reset
-        float btnY2 = -572;
+        // Row 2: Speed, Defect & Manual Actuation
+        float btnY2 = -558;
         CreateUIButton("BtnSpeedDown", panel.transform, "SPEED -", new Vector2(20, btnY2), new Vector2(85, 34), new Color(0.2f, 0.25f, 0.3f), () =>
         {
             conveyorSpeed = Mathf.Max(conveyorSpeed - 0.4f, 0.4f);
@@ -964,32 +1161,47 @@ public class AutomatedSortingCellTwin : MonoBehaviour
             conveyorSpeed = Mathf.Min(conveyorSpeed + 0.4f, 4.0f);
         });
 
-        CreateUIButton("BtnReset", panel.transform, "RESET STATS", new Vector2(210, btnY2), new Vector2(95, 34), new Color(0.25f, 0.3f, 0.35f), () =>
+        CreateUIButton("BtnDefect", panel.transform, "+ DEFECT", new Vector2(210, btnY2), new Vector2(95, 34), new Color(0.65f, 0.25f, 0.15f), () =>
         {
-            totalSpawned = 0;
-            passCount = 0;
-            rejectCount = 0;
+            queueNextDefect = true;
+            nextDefectType = "Dimension (Over-Height)";
         });
 
-        CreateUIButton("BtnEStop", panel.transform, "E-STOP", new Vector2(315, btnY2), new Vector2(85, 34), new Color(0.75f, 0.12f, 0.12f), () =>
+        CreateUIButton("BtnPush", panel.transform, "ACTUATE", new Vector2(315, btnY2), new Vector2(85, 34), new Color(0.2f, 0.45f, 0.65f), () =>
         {
-            isEmergencyStopped = !isEmergencyStopped;
-            if (isEmergencyStopped) isRunning = false;
+            TriggerPusherActuation();
         });
 
-        // Third Row: Camera Views
-        float btnY3 = -618;
-        CreateUIButton("Cam1", panel.transform, "CAM 1: ORBIT", new Vector2(20, btnY3), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(1));
-        CreateUIButton("Cam2", panel.transform, "CAM 2: VISION", new Vector2(115, btnY3), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(2));
-        CreateUIButton("Cam3", panel.transform, "CAM 3: PUSHER", new Vector2(210, btnY3), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(3));
-        CreateUIButton("Cam4", panel.transform, "CAM 4: CHUTE", new Vector2(305, btnY3), new Vector2(95, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(4));
+        // Row 3: Comprehensive Reset (Cell Reset vs Counters Reset)
+        float btnY3 = -598;
+        CreateUIButton("BtnResetCell", panel.transform, "RESET CELL (CLEAR ALL)", new Vector2(20, btnY3), new Vector2(180, 34), new Color(0.2f, 0.5f, 0.75f), () =>
+        {
+            ResetCell();
+        });
+
+        CreateUIButton("BtnResetCounters", panel.transform, "RESET STATS ONLY", new Vector2(210, btnY3), new Vector2(190, 34), new Color(0.24f, 0.28f, 0.32f), () =>
+        {
+            ResetCountersOnly();
+        });
+
+        // Row 4: Camera View Presets
+        float btnY4 = -640;
+        CreateUIButton("Cam1", panel.transform, "CAM 1: ORBIT", new Vector2(20, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(1));
+        CreateUIButton("Cam2", panel.transform, "CAM 2: VISION", new Vector2(115, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(2));
+        CreateUIButton("Cam3", panel.transform, "CAM 3: PUSHER", new Vector2(210, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(3));
+        CreateUIButton("Cam4", panel.transform, "CAM 4: CHUTE", new Vector2(305, btnY4), new Vector2(95, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(4));
     }
 
     private void UpdateDashboardUI()
     {
         if (uiStatusText == null) return;
 
-        if (isEmergencyStopped)
+        if (isJammed)
+        {
+            uiStatusText.text = $"JAM FAULT: {jamFaultMessage}";
+            uiStatusText.color = new Color(1f, 0.25f, 0.2f);
+        }
+        else if (isEmergencyStopped)
         {
             uiStatusText.text = "SYSTEM  /  EMERGENCY STOPPED";
             uiStatusText.color = new Color(1f, 0.25f, 0.25f);
@@ -1019,6 +1231,7 @@ public class AutomatedSortingCellTwin : MonoBehaviour
             $"PHOTO-EYE SENSOR  : {(infeedSensorActive ? "<color=#00e5ff>TRIGGERED</color>" : "<color=#888888>IDLE</color>")}\n" +
             $"VISION INSPECTION : {(visionSensorActive ? "<color=#00ff66>SCANNING</color>" : "<color=#888888>READY</color>")}\n" +
             $"PUSHER PROXIMITY  : {(pusherSensorActive ? "<color=#ffaa00>PART PRESENT</color>" : "<color=#888888>CLEAR</color>")}\n" +
+            $"LINE FAULT STATUS : {(isJammed ? "<color=#ff3d00>JAMMED</color>" : "<color=#00e676>NOMINAL</color>")}\n" +
             $"ACTUATOR STROKE   : {(pusherCurrentStroke * 100f):F0} %";
 
         if (selectedWorkpiece != null && selectedWorkpiece.gameObject != null)
@@ -1235,14 +1448,39 @@ public class AutomatedSortingCellTwin : MonoBehaviour
     /// <summary>
     /// Resets all part counters and statistics.
     /// </summary>
+    /// <summary>
+    /// Clears any active jam or stall fault and returns the cell to safe operational state.
+    /// </summary>
+    public static string CellClearJam()
+    {
+        if (Instance == null)
+            return "{\"error\":\"Cell instance not running\"}";
+
+        Instance.ClearJamAndRecover();
+        return "{\"status\":\"ok\",\"action\":\"jam_cleared\"}";
+    }
+
+    /// <summary>
+    /// Resets the entire cell: clears all active workpieces, homes actuator, clears faults, and resumes line.
+    /// </summary>
+    public static string CellResetCell()
+    {
+        if (Instance == null)
+            return "{\"error\":\"Cell instance not running\"}";
+
+        Instance.ResetCell();
+        return "{\"status\":\"ok\",\"action\":\"cell_reset_complete\"}";
+    }
+
+    /// <summary>
+    /// Resets part counters and statistics only.
+    /// </summary>
     public static string CellResetStats()
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";
 
-        Instance.totalSpawned = 0;
-        Instance.passCount = 0;
-        Instance.rejectCount = 0;
+        Instance.ResetCountersOnly();
         return "{\"status\":\"ok\",\"action\":\"stats_reset\"}";
     }
 
