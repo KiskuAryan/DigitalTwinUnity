@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 1cb24004206f0ed44a062c5d77262f70
+AssetOrigin:
+  serializedVersion: 1
+  productId: 361912
+  packageName: realvirtual.io MCP Server
+  packageVersion: 1.1.0
+  assetPath: Packages/io.realvirtual.mcp/Editor/CameraFrameTools.cs
+  uploadId: 951790

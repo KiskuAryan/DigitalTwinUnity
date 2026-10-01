@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 9cacbca4289a78c459009f9abe4298fc
+AssetOrigin:
+  serializedVersion: 1
+  productId: 361912
+  packageName: realvirtual.io MCP Server
+  packageVersion: 1.1.0
+  assetPath: Packages/io.realvirtual.mcp/Runtime/Serialization/McpSafeJson.cs
+  uploadId: 951790

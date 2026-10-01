@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 1ebc79662692c544bb8078d7d88fa77e
+AssetOrigin:
+  serializedVersion: 1
+  productId: 361912
+  packageName: realvirtual.io MCP Server
+  packageVersion: 1.1.0
+  assetPath: Packages/io.realvirtual.mcp/Editor/DebugMarkerTools.cs
+  uploadId: 951790

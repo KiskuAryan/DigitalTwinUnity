@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: d5bc0d9a186257e499dc19fb5e8dedb7
+AssetOrigin:
+  serializedVersion: 1
+  productId: 361912
+  packageName: realvirtual.io MCP Server
+  packageVersion: 1.1.0
+  assetPath: Packages/io.realvirtual.mcp/Editor/VideoRecorderTools.cs
+  uploadId: 951790
