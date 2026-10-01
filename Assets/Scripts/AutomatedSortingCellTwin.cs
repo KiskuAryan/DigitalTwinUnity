@@ -1086,113 +1086,120 @@ public class AutomatedSortingCellTwin : MonoBehaviour
 
     private void SetupDashboardUI()
     {
-        GameObject canvasObj = new GameObject("TwinViewSCADA_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        Canvas canvas = canvasObj.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-        CanvasScaler scaler = canvasObj.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920, 1080);
-
-        if (EventSystem.current == null)
+        try
         {
-            new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            GameObject canvasObj = new GameObject("TwinViewSCADA_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            Canvas canvas = canvasObj.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            CanvasScaler scaler = canvasObj.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+
+            if (EventSystem.current == null)
+            {
+                new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            }
+
+            // Main SCADA Monitoring Glass Panel
+            GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(28, -28), new Vector2(420, 715), new Color(0.06f, 0.08f, 0.11f, 0.94f));
+
+            // Header Title
+            CreateUILabel("HeaderTitle", panel.transform, "DIGITAL TWIN  /  SORTING CELL", 20, -22, 380, 32, 20, true, Color.white);
+            CreateUILabel("HeaderSub", panel.transform, "STANDALONE C# SIMULATION  |  CELL 01", 20, -54, 380, 20, 12, false, new Color(0.2f, 0.85f, 1f));
+
+            // Andon Light Mini Indicator in UI
+            GameObject andonGroup = CreateUIBox("AndonLEDs", panel.transform, new Vector2(300, -22), new Vector2(90, 30), new Color(0.12f, 0.15f, 0.18f));
+            uiAndonRedLed = CreateUICircle("RedLED", andonGroup.transform, new Vector2(16, -15), 18, Color.red);
+            uiAndonAmberLed = CreateUICircle("AmberLED", andonGroup.transform, new Vector2(45, -15), 18, Color.yellow);
+            uiAndonGreenLed = CreateUICircle("GreenLED", andonGroup.transform, new Vector2(74, -15), 18, Color.green);
+
+            // Status Banner
+            uiStatusText = CreateUILabel("StatusText", panel.transform, "SYSTEM STATUS", 20, -90, 380, 34, 16, true, Color.green);
+
+            // Production KPI Panel Section
+            uiKpiText = CreateUILabel("KpiText", panel.transform, "KPIS LOADING...", 20, -135, 380, 140, 14, false, Color.white);
+
+            // Actuator Gauge
+            CreateUILabel("ActuatorLabel", panel.transform, "PNEUMATIC ACTUATOR STROKE", 20, -285, 380, 20, 12, true, new Color(0.6f, 0.7f, 0.8f));
+            uiPusherGauge = CreateProgressBar("PusherGauge", panel.transform, new Vector2(20, -310), new Vector2(380, 14));
+
+            // Sensor Live Signals
+            uiSensorText = CreateUILabel("SensorSignals", panel.transform, "SENSORS", 20, -335, 380, 75, 12, false, new Color(0.8f, 0.9f, 1f));
+
+            // Selected Workpiece Telemetry Card
+            uiSelectedPartText = CreateUILabel("SelectedPart", panel.transform, "Click a part to view pedigree", 20, -420, 380, 85, 13, false, new Color(0.95f, 0.8f, 0.4f));
+
+            // Row 1: Line Operations
+            float btnY = -518;
+            CreateUIButton("BtnRun", panel.transform, "RUN", new Vector2(20, btnY), new Vector2(85, 34), new Color(0.1f, 0.55f, 0.35f), () =>
+            {
+                if (isJammed) ClearJamAndRecover();
+                else { isRunning = true; isEmergencyStopped = false; }
+            });
+
+            CreateUIButton("BtnPause", panel.transform, "PAUSE", new Vector2(115, btnY), new Vector2(85, 34), new Color(0.45f, 0.35f, 0.15f), () =>
+            {
+                isRunning = false;
+            });
+
+            CreateUIButton("BtnClearJam", panel.transform, "CLEAR JAM", new Vector2(210, btnY), new Vector2(95, 34), new Color(0.85f, 0.45f, 0.1f), () =>
+            {
+                ClearJamAndRecover();
+            });
+
+            CreateUIButton("BtnEStop", panel.transform, "E-STOP", new Vector2(315, btnY), new Vector2(85, 34), new Color(0.75f, 0.12f, 0.12f), () =>
+            {
+                isEmergencyStopped = !isEmergencyStopped;
+                if (isEmergencyStopped) isRunning = false;
+            });
+
+            // Row 2: Speed, Defect & Manual Actuation
+            float btnY2 = -558;
+            CreateUIButton("BtnSpeedDown", panel.transform, "SPEED -", new Vector2(20, btnY2), new Vector2(85, 34), new Color(0.2f, 0.25f, 0.3f), () =>
+            {
+                conveyorSpeed = Mathf.Max(conveyorSpeed - 0.4f, 0.4f);
+            });
+
+            CreateUIButton("BtnSpeedUp", panel.transform, "SPEED +", new Vector2(115, btnY2), new Vector2(85, 34), new Color(0.2f, 0.25f, 0.3f), () =>
+            {
+                conveyorSpeed = Mathf.Min(conveyorSpeed + 0.4f, 4.0f);
+            });
+
+            CreateUIButton("BtnDefect", panel.transform, "+ DEFECT", new Vector2(210, btnY2), new Vector2(95, 34), new Color(0.65f, 0.25f, 0.15f), () =>
+            {
+                queueNextDefect = true;
+                nextDefectType = "Dimension (Over-Height)";
+            });
+
+            CreateUIButton("BtnPush", panel.transform, "ACTUATE", new Vector2(315, btnY2), new Vector2(85, 34), new Color(0.2f, 0.45f, 0.65f), () =>
+            {
+                TriggerPusherActuation();
+            });
+
+            // Row 3: Comprehensive Reset (Cell Reset vs Counters Reset)
+            float btnY3 = -598;
+            CreateUIButton("BtnResetCell", panel.transform, "RESET CELL (CLEAR ALL)", new Vector2(20, btnY3), new Vector2(180, 34), new Color(0.2f, 0.5f, 0.75f), () =>
+            {
+                ResetCell();
+            });
+
+            CreateUIButton("BtnResetCounters", panel.transform, "RESET STATS ONLY", new Vector2(210, btnY3), new Vector2(190, 34), new Color(0.24f, 0.28f, 0.32f), () =>
+            {
+                ResetCountersOnly();
+            });
+
+            // Row 4: Camera View Presets
+            float btnY4 = -640;
+            CreateUIButton("Cam1", panel.transform, "CAM 1: ORBIT", new Vector2(20, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(1));
+            CreateUIButton("Cam2", panel.transform, "CAM 2: VISION", new Vector2(115, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(2));
+            CreateUIButton("Cam3", panel.transform, "CAM 3: PUSHER", new Vector2(210, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(3));
+            CreateUIButton("Cam4", panel.transform, "CAM 4: CHUTE", new Vector2(305, btnY4), new Vector2(95, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(4));
         }
-
-        // Main SCADA Monitoring Glass Panel
-        GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(28, -28), new Vector2(420, 715), new Color(0.06f, 0.08f, 0.11f, 0.94f));
-
-        // Header Title
-        CreateUILabel("HeaderTitle", panel.transform, "DIGITAL TWIN  /  SORTING CELL", 20, -22, 380, 32, 20, true, Color.white);
-        CreateUILabel("HeaderSub", panel.transform, "STANDALONE C# SIMULATION  |  CELL 01", 20, -54, 380, 20, 12, false, new Color(0.2f, 0.85f, 1f));
-
-        // Andon Light Mini Indicator in UI
-        GameObject andonGroup = CreateUIBox("AndonLEDs", panel.transform, new Vector2(300, -22), new Vector2(90, 30), new Color(0.12f, 0.15f, 0.18f));
-        uiAndonRedLed = CreateUICircle("RedLED", andonGroup.transform, new Vector2(16, -15), 18, Color.red);
-        uiAndonAmberLed = CreateUICircle("AmberLED", andonGroup.transform, new Vector2(45, -15), 18, Color.yellow);
-        uiAndonGreenLed = CreateUICircle("GreenLED", andonGroup.transform, new Vector2(74, -15), 18, Color.green);
-
-        // Status Banner
-        uiStatusText = CreateUILabel("StatusText", panel.transform, "SYSTEM STATUS", 20, -90, 380, 34, 16, true, Color.green);
-
-        // Production KPI Panel Section
-        uiKpiText = CreateUILabel("KpiText", panel.transform, "KPIS LOADING...", 20, -135, 380, 140, 14, false, Color.white);
-
-        // Actuator Gauge
-        CreateUILabel("ActuatorLabel", panel.transform, "PNEUMATIC ACTUATOR STROKE", 20, -285, 380, 20, 12, true, new Color(0.6f, 0.7f, 0.8f));
-        uiPusherGauge = CreateProgressBar("PusherGauge", panel.transform, new Vector2(20, -310), new Vector2(380, 14));
-
-        // Sensor Live Signals
-        uiSensorText = CreateUILabel("SensorSignals", panel.transform, "SENSORS", 20, -335, 380, 75, 12, false, new Color(0.8f, 0.9f, 1f));
-
-        // Selected Workpiece Telemetry Card
-        uiSelectedPartText = CreateUILabel("SelectedPart", panel.transform, "Click a part to view pedigree", 20, -420, 380, 85, 13, false, new Color(0.95f, 0.8f, 0.4f));
-
-        // Row 1: Line Operations
-        float btnY = -518;
-        CreateUIButton("BtnRun", panel.transform, "RUN", new Vector2(20, btnY), new Vector2(85, 34), new Color(0.1f, 0.55f, 0.35f), () =>
+        catch (System.Exception ex)
         {
-            if (isJammed) ClearJamAndRecover();
-            else { isRunning = true; isEmergencyStopped = false; }
-        });
-
-        CreateUIButton("BtnPause", panel.transform, "PAUSE", new Vector2(115, btnY), new Vector2(85, 34), new Color(0.45f, 0.35f, 0.15f), () =>
-        {
-            isRunning = false;
-        });
-
-        CreateUIButton("BtnClearJam", panel.transform, "CLEAR JAM", new Vector2(210, btnY), new Vector2(95, 34), new Color(0.85f, 0.45f, 0.1f), () =>
-        {
-            ClearJamAndRecover();
-        });
-
-        CreateUIButton("BtnEStop", panel.transform, "E-STOP", new Vector2(315, btnY), new Vector2(85, 34), new Color(0.75f, 0.12f, 0.12f), () =>
-        {
-            isEmergencyStopped = !isEmergencyStopped;
-            if (isEmergencyStopped) isRunning = false;
-        });
-
-        // Row 2: Speed, Defect & Manual Actuation
-        float btnY2 = -558;
-        CreateUIButton("BtnSpeedDown", panel.transform, "SPEED -", new Vector2(20, btnY2), new Vector2(85, 34), new Color(0.2f, 0.25f, 0.3f), () =>
-        {
-            conveyorSpeed = Mathf.Max(conveyorSpeed - 0.4f, 0.4f);
-        });
-
-        CreateUIButton("BtnSpeedUp", panel.transform, "SPEED +", new Vector2(115, btnY2), new Vector2(85, 34), new Color(0.2f, 0.25f, 0.3f), () =>
-        {
-            conveyorSpeed = Mathf.Min(conveyorSpeed + 0.4f, 4.0f);
-        });
-
-        CreateUIButton("BtnDefect", panel.transform, "+ DEFECT", new Vector2(210, btnY2), new Vector2(95, 34), new Color(0.65f, 0.25f, 0.15f), () =>
-        {
-            queueNextDefect = true;
-            nextDefectType = "Dimension (Over-Height)";
-        });
-
-        CreateUIButton("BtnPush", panel.transform, "ACTUATE", new Vector2(315, btnY2), new Vector2(85, 34), new Color(0.2f, 0.45f, 0.65f), () =>
-        {
-            TriggerPusherActuation();
-        });
-
-        // Row 3: Comprehensive Reset (Cell Reset vs Counters Reset)
-        float btnY3 = -598;
-        CreateUIButton("BtnResetCell", panel.transform, "RESET CELL (CLEAR ALL)", new Vector2(20, btnY3), new Vector2(180, 34), new Color(0.2f, 0.5f, 0.75f), () =>
-        {
-            ResetCell();
-        });
-
-        CreateUIButton("BtnResetCounters", panel.transform, "RESET STATS ONLY", new Vector2(210, btnY3), new Vector2(190, 34), new Color(0.24f, 0.28f, 0.32f), () =>
-        {
-            ResetCountersOnly();
-        });
-
-        // Row 4: Camera View Presets
-        float btnY4 = -640;
-        CreateUIButton("Cam1", panel.transform, "CAM 1: ORBIT", new Vector2(20, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(1));
-        CreateUIButton("Cam2", panel.transform, "CAM 2: VISION", new Vector2(115, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(2));
-        CreateUIButton("Cam3", panel.transform, "CAM 3: PUSHER", new Vector2(210, btnY4), new Vector2(90, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(3));
-        CreateUIButton("Cam4", panel.transform, "CAM 4: CHUTE", new Vector2(305, btnY4), new Vector2(95, 32), new Color(0.15f, 0.2f, 0.25f), () => ApplyCameraPreset(4));
+            Debug.LogError($"[SCADA Dashboard] UI Initialization error: {ex}");
+        }
     }
 
     private void UpdateDashboardUI()
@@ -1281,6 +1288,41 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return img;
     }
 
+    private static Font _cachedDefaultFont;
+    private static Font GetDefaultFont()
+    {
+        if (_cachedDefaultFont != null) return _cachedDefaultFont;
+
+        // Unity 6 built-in runtime font
+        try
+        {
+            _cachedDefaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+        catch { }
+
+        // Fallback for older Unity releases
+        if (_cachedDefaultFont == null)
+        {
+            try
+            {
+                _cachedDefaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+            catch { }
+        }
+
+        // Fallback to system OS standard fonts
+        if (_cachedDefaultFont == null)
+        {
+            try
+            {
+                _cachedDefaultFont = Font.CreateDynamicFontFromOSFont(new string[] { "Arial", "Segoe UI", "Tahoma", "Liberation Sans" }, 14);
+            }
+            catch { }
+        }
+
+        return _cachedDefaultFont;
+    }
+
     private Text CreateUILabel(string name, Transform parent, string text, float x, float y, float w, float h, int fontSize, bool bold, Color col)
     {
         GameObject go = new GameObject(name, typeof(RectTransform), typeof(Text));
@@ -1296,10 +1338,12 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         t.text = text;
         t.fontSize = fontSize;
         t.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
-        t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        t.font = GetDefaultFont();
         t.color = col;
         t.alignment = TextAnchor.MiddleLeft;
         t.supportRichText = true;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
         return t;
     }
 
@@ -1367,6 +1411,12 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         btn.onClick.AddListener(onClick);
 
         Text t = CreateUILabel("Text", go.transform, label, 0, 0, size.x, size.y, 11, true, Color.white);
+        RectTransform textRt = t.GetComponent<RectTransform>();
+        textRt.anchorMin = Vector2.zero;
+        textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = Vector2.zero;
+        textRt.offsetMax = Vector2.zero;
+        textRt.pivot = new Vector2(0.5f, 0.5f);
         t.alignment = TextAnchor.MiddleCenter;
     }
 
