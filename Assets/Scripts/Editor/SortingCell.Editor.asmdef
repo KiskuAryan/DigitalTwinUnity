@@ -2,9 +2,7 @@
     "name": "SortingCell.Editor",
     "rootNamespace": "",
     "references": [
-        "SortingCell",
-        "io.realvirtual.mcp",
-        "UnityEngine.UI"
+        "SortingCell"
     ],
     "includePlatforms": [
         "Editor"

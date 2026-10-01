@@ -2,7 +2,6 @@
     "name": "SortingCell",
     "rootNamespace": "",
     "references": [
-        "io.realvirtual.mcp",
         "UnityEngine.UI"
     ],
     "includePlatforms": [],

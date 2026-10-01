@@ -1,11 +1,11 @@
-# Automated Conveyor & Sorting Cell Digital Twin (realvirtual.io MCP)
+# Automated Conveyor & Sorting Cell Digital Twin (Unity 6 / Pure C#)
 
 [![Unity 6](https://img.shields.io/badge/Unity-6000.3.25f1-black?logo=unity)](https://unity.com/)
-[![MCP Server](https://img.shields.io/badge/MCP-FastMCP%202.0-blue)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![C#](https://img.shields.io/badge/Language-C%23-blue.svg)](https://learn.microsoft.com/en-us/dotnet/csharp/)
 [![Digital Twin](https://img.shields.io/badge/Industry%204.0-Digital%20Twin-orange)]()
 
-An industrial digital twin project built in **Unity 6** and connected via the **realvirtual Model Context Protocol (MCP)** ecosystem. Enables AI agents (such as Antigravity, Claude, and Cursor) to monitor, inspect, and autonomously control physical factory floor equipment in real time.
+An industrial digital twin project built in **Unity 6** with **pure C# simulation logic**. It simulates a fully automated factory quality-control and sorting station with real-time physics, optical inspection, pneumatic actuation, and an interactive SCADA HUD dashboard.
 
 ---
 
@@ -19,34 +19,40 @@ An industrial digital twin project built in **Unity 6** and connected via the **
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Digital Twin Architecture
+
+The simulation runs entirely within Unity's native physics and C# runtime with zero external dependencies:
 
 ```
-                          +------------------------------+
-                          |    AI Agent (MCP Client)     |
-                          | (Antigravity / Claude / etc) |
-                          +--------------+---------------+
-                                         |
-                             JSON-RPC (stdio transport)
-                                         v
-                          +------------------------------+
-                          | Python FastMCP Server Bridge |
-                          |   (unity_mcp_server.py)      |
-                          +--------------+---------------+
-                                         |
-                             WebSocket (Port 18711 /mcp)
-                                         v
-             +-------------------------------------------------------+
-             |              Unity 6 Editor & Simulation              |
-             |  - Infeed Conveyor Line (-5.8m to +5.2m)              |
-             |  - Machine Vision Inspection Gantry & Laser Sheet     |
-             |  - Optical Photo-Eye Retro-Reflector Sensor          |
-             |  - Pneumatic Pusher Sorting Actuator & Guide Fence   |
-             |  - 90-Degree Divert Chute & Industrial Scrap Tote    |
-             |  - Pass Accumulation Table Buffer                    |
-             |  - 3-Tier Industrial Andon Stack Light               |
-             |  - Live Real-time SCADA HUD Dashboard                |
-             +-------------------------------------------------------+
++-------------------------------------------------------------------------+
+|                       Automated Sorting Cell Twin                       |
+|                          (C# Simulation Loop)                           |
++------------------------------------+------------------------------------+
+                                     |
+    +--------------------------------+--------------------------------+
+    |                                |                                |
+    v                                v                                v
+[ Conveyor Transport ]      [ Machine Vision Gate ]       [ Pneumatic Actuator ]
+ - Continuous Belt Drive     - Optical Photo-Eye Sensor    - Parametric Stroke
+ - Rigid Extruded Frame      - Cyan Laser Sheet Beam       - Real-time Actuation
+ - Safety Guide Rails        - Surface & Dimension Check   - Rubber Contact Bumper
+    |                                |                                |
+    +--------------------------------+--------------------------------+
+                                     |
+                                     v
+                       +---------------------------+
+                       |   Dual Routing System     |
+                       |  - Pass Accumulation      |
+                       |  - 45° Reject Chute & Bin |
+                       +-------------+-------------+
+                                     |
+                                     v
+                       +---------------------------+
+                       | Monitoring & SCADA HUD    |
+                       |  - 3-Tier Andon Tower     |
+                       |  - Live Diagnostics HUD   |
+                       |  - Interactive Inspector  |
+                       +---------------------------+
 ```
 
 ---
@@ -57,12 +63,13 @@ An industrial digital twin project built in **Unity 6** and connected via the **
    - Aluminum extruded framing with adjustable leveling pads.
    - High-friction transport belt with driven end drum rollers.
    - Dual safety-yellow guide rails with sorting cutouts.
-   - 3-Phase motor drive representation.
+   - 3-Phase electric motor drive unit.
 
 2. **Machine Vision Inspection Gantry (X = -0.6m)**:
-   - Rigid overhead gantry bridge.
-   - High-speed industrial vision camera with integrated LED illuminator.
+   - Overhead archway bridge structure.
+   - High-speed industrial vision camera with integrated LED ring illuminator.
    - Dynamic cyan laser scanning sheet plane across the transport path.
+   - Retro-reflective photoelectric sensor gate.
 
 3. **Pneumatic Sorting Actuator Station (X = +1.8m)**:
    - Industrial pneumatic cylinder barrel with chrome piston rod.
@@ -74,39 +81,55 @@ An industrial digital twin project built in **Unity 6** and connected via the **
    - Low-friction gravity sheet chute feeding into a heavy-duty industrial scrap tote bin.
 
 5. **3-Tier Industrial Andon Stack Light**:
-   - 🔴 **Red**: Emergency Stop / System Interlock Fault
-   - 🟡 **Amber**: Defect detected / Pneumatic actuator actively sorting
+   - 🔴 **Red**: Emergency Stop / Line Halted
+   - 🟡 **Amber**: Defect detected / Pneumatic actuator actively diverting
    - 🟢 **Green**: Nominal automated production
 
 6. **Interactive SCADA HUD Dashboard**:
-   - Real-time line speed, throughput, pass count, reject count, and defect percentage.
-   - Live I/O indicators (Vision Sensor, Pusher Extended/Retracted, Andon State).
-   - Clickable workpiece inspector displaying live telemetry.
+   - Real-time line speed, throughput (parts/min), pass count, reject count, and defect percentage.
+   - Live I/O indicators (Vision Sensor, Pusher State, Andon State).
+   - Clickable camera view buttons (Overview, Vision Inspection, Pneumatic Pusher, Reject Chute).
+   - Interactive workpiece inspector displaying real-time dimensions, quality status, and timestamps.
 
 ---
 
-## 🛠️ Realvirtual MCP Tools
+## 💻 Pure C# Control API
 
-The system exposes high-level industrial digital twin endpoints through the realvirtual MCP bridge:
+All digital twin operations are exposed through clean, static C# methods on `AutomatedSortingCellTwin`:
 
-| Tool Name | Parameters | Description |
-|---|---|---|
-| `cell_get_telemetry` | *none* | Retrieves complete JSON telemetry (speed, parts count, defect rate, sensor signals, actuator stroke). |
-| `cell_set_speed` | `speed: float` (0.4 to 4.0 m/s) | Adjusts conveyor line transport speed in real time. |
-| `cell_inject_defect` | `defectType: string` | Queues an intentional flaw (`Dimension`, `Surface Flaw`) for sorting validation. |
-| `cell_trigger_pusher` | *none* | Manually actuates the pneumatic sorting piston. |
-| `cell_toggle_emergency_stop` | `engage: bool` | Halts or releases the emergency stop safety circuit. |
-| `cell_reset_stats` | *none* | Resets all throughput, pass, and reject counters. |
-| `cell_set_camera` | `preset: string` | Switches camera view (`overview`, `vision`, `pusher`, `chute`). |
-| `cell_spawn_workpiece` | `defective: bool`, `defectType: string` | Spawns a custom workpiece with specified quality parameters. |
+```csharp
+// Read live operational telemetry
+string json = AutomatedSortingCellTwin.CellGetTelemetry();
+
+// Adjust conveyor transport speed (0.4 to 4.0 m/s)
+AutomatedSortingCellTwin.CellSetSpeed(2.2f);
+
+// Inject intentional defects for quality validation ("Dimension" or "Surface Flaw")
+AutomatedSortingCellTwin.CellInjectDefect("Dimension");
+
+// Manually trigger the pneumatic pusher
+AutomatedSortingCellTwin.CellTriggerPusher();
+
+// Engage or disengage Emergency Stop
+AutomatedSortingCellTwin.CellToggleEmergencyStop(true);
+
+// Reset throughput and defect statistics
+AutomatedSortingCellTwin.CellResetStats();
+
+// Switch camera view presets ("overview", "vision", "pusher", "chute")
+AutomatedSortingCellTwin.CellSetCamera("vision");
+
+// Spawn custom workpieces dynamically
+AutomatedSortingCellTwin.CellSpawnWorkpiece(isDefective: true, defectType: "Scratch");
+```
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Unity 6** (Recommended: `6000.0` or higher, e.g. `6000.3.25f1`) with Universal Render Pipeline (URP).
-- **Python 3.10+** (if running the external MCP bridge outside Unity).
+- **Unity 6** (`6000.0` or higher, e.g. `6000.3.25f1`) with Universal Render Pipeline (URP).
+- No external packages or plugins required!
 
 ### 1. Clone the Repository
 ```bash
@@ -116,28 +139,10 @@ cd DigitalTwinUnity
 
 ### 2. Open in Unity
 1. Launch **Unity Hub**.
-2. Click **Add** -> **Add project from disk** and select the cloned folder.
+2. Click **Add** -> **Add project from disk** and select the cloned `DigitalTwinUnity` folder.
 3. Open the project with Unity 6.
 4. Open the scene at `Assets/Scenes/ConveyTwin_Main.unity`.
 5. Press **Play** ▶️ to run the simulation!
-
-### 3. Connect to MCP Clients (Claude Desktop / Antigravity / Cursor)
-Add the server configuration to your `claude_desktop_config.json` or `mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "realvirtual-unity": {
-      "command": "python",
-      "args": [
-        "<PATH_TO_PROJECT>/Assets/StreamingAssets/realvirtual-MCP/unity_mcp_server.py",
-        "--mode", "stdio",
-        "--port", "18711"
-      ]
-    }
-  }
-}
-```
 
 ---
 
@@ -147,18 +152,15 @@ Add the server configuration to your `claude_desktop_config.json` or `mcp_config
 DigitalTwinUnity/
 ├── Assets/
 │   ├── Scenes/
-│   │   └── ConveyTwin_Main.unity           # Main configured digital twin scene
-│   ├── Scripts/
-│   │   ├── AutomatedSortingCellTwin.cs     # Core digital twin simulation logic & MCP tools
-│   │   ├── SortingCell.asmdef              # Isolated assembly definition
-│   │   └── Editor/
-│   │       ├── AutomatedSortingCellEditor.cs # Menu item for one-click setup
-│   │       └── SortingCell.Editor.asmdef
-│   └── StreamingAssets/
-│       └── realvirtual-MCP/                # Python MCP server bridge
+│   │   └── ConveyTwin_Main.unity           # Configured digital twin scene
+│   └── Scripts/
+│       ├── AutomatedSortingCellTwin.cs     # Core digital twin simulation logic & C# API
+│       ├── SortingCell.asmdef              # Isolated assembly definition
+│       └── Editor/
+│           ├── AutomatedSortingCellEditor.cs # Menu item for one-click scene setup
+│           └── SortingCell.Editor.asmdef
 ├── Packages/
-│   ├── io.realvirtual.mcp/                 # Realvirtual MCP Package (MIT)
-│   ├── manifest.json
+│   ├── manifest.json                       # Core Unity packages (URP, Input System, UI)
 │   └── packages-lock.json
 ├── ProjectSettings/                        # Unity physics, tag, and project configurations
 ├── docs/
@@ -172,4 +174,3 @@ DigitalTwinUnity/
 
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE).
-realvirtual MCP components are copyright (c) realvirtual GmbH under MIT License.

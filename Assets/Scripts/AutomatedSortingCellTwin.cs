@@ -4,11 +4,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
-using realvirtual.MCP;
 
 /// <summary>
 /// Automated Conveyor & Sorting Cell Digital Twin
-/// Built for realvirtual.io MCP ecosystem in Unity 6.
+/// Built in Unity 6 with pure C# simulation logic.
 /// Features:
 /// - Infeed conveyor with aluminum extruded framing, drive motor, and guide rails.
 /// - Photoelectric optical detection gate & Machine Vision scanner with laser line indicator.
@@ -16,7 +15,7 @@ using realvirtual.MCP;
 /// - Dual routing: Pass accumulation buffer and 90-degree reject divert chute with scrap tote.
 /// - 3-Tier industrial Andon stack light (Red/Amber/Green).
 /// - Comprehensive live SCADA telemetry HUD with clickable workpiece inspection.
-/// - Real-time AI integration via exposed [McpTool] endpoints for realvirtual MCP.
+/// - Pure C# API methods for automated control, statistics, and simulation management.
 /// </summary>
 public class AutomatedSortingCellTwin : MonoBehaviour
 {
@@ -1156,10 +1155,12 @@ public class AutomatedSortingCellTwin : MonoBehaviour
     }
 
     // =========================================================================
-    // EXPOSED AI REALVIRTUAL MCP TOOLS
+    // PUBLIC C# CONTROL & TELEMETRY API
     // =========================================================================
 
-    [McpTool("Get complete digital twin telemetry of the Automated Sorting Cell including speeds, counts, sensor signals, and defect rate")]
+    /// <summary>
+    /// Returns full telemetry data as a JSON string for diagnostics or UI integration.
+    /// </summary>
     public static string CellGetTelemetry()
     {
         if (Instance == null)
@@ -1181,8 +1182,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
             Instance.pusherCurrentStroke);
     }
 
-    [McpTool("Set conveyor line transport speed in meters per second (0.4 to 4.0 m/s)")]
-    public static string CellSetSpeed([McpParam("Desired speed in m/s")] float speed)
+    /// <summary>
+    /// Sets the conveyor line transport speed in meters per second (0.4 to 4.0 m/s).
+    /// </summary>
+    public static string CellSetSpeed(float speed)
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";
@@ -1191,8 +1194,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return string.Format("{{\"status\":\"ok\",\"newSpeed\":{0:F2}}}", Instance.conveyorSpeed);
     }
 
-    [McpTool("Inject an intentional defect into the next spawned workpiece for sorting validation")]
-    public static string CellInjectDefect([McpParam("Defect type: Dimension, Surface Flaw, or Random")] string defectType = "Surface Flaw")
+    /// <summary>
+    /// Injects an intentional defect into the next spawned workpiece for sorting validation.
+    /// </summary>
+    public static string CellInjectDefect(string defectType = "Surface Flaw")
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";
@@ -1202,7 +1207,9 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return string.Format("{{\"status\":\"ok\",\"queuedDefect\":\"{0}\"}}", defectType);
     }
 
-    [McpTool("Manually fire the pneumatic sorting pusher actuator")]
+    /// <summary>
+    /// Manually fires the pneumatic sorting pusher actuator.
+    /// </summary>
     public static string CellTriggerPusher()
     {
         if (Instance == null)
@@ -1212,8 +1219,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return "{\"status\":\"ok\",\"action\":\"pusher_actuated\"}";
     }
 
-    [McpTool("Set emergency stop state of the sorting cell")]
-    public static string CellToggleEmergencyStop([McpParam("True to engage E-Stop, False to release")] bool engage)
+    /// <summary>
+    /// Sets emergency stop state of the sorting cell.
+    /// </summary>
+    public static string CellToggleEmergencyStop(bool engage)
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";
@@ -1223,7 +1232,9 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return string.Format("{{\"status\":\"ok\",\"emergencyStop\":{0}}}", engage ? "true" : "false");
     }
 
-    [McpTool("Reset all part counters and statistics")]
+    /// <summary>
+    /// Resets all part counters and statistics.
+    /// </summary>
     public static string CellResetStats()
     {
         if (Instance == null)
@@ -1235,8 +1246,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return "{\"status\":\"ok\",\"action\":\"stats_reset\"}";
     }
 
-    [McpTool("Switch camera view preset: overview, vision, pusher, or chute")]
-    public static string CellSetCamera([McpParam("Camera preset name: overview, vision, pusher, or chute")] string preset)
+    /// <summary>
+    /// Switches camera view preset: overview, vision, pusher, or chute.
+    /// </summary>
+    public static string CellSetCamera(string preset)
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";
@@ -1251,8 +1264,10 @@ public class AutomatedSortingCellTwin : MonoBehaviour
         return string.Format("{{\"status\":\"ok\",\"activePreset\":{0}}}", p);
     }
 
-    [McpTool("Spawn a workpiece immediately into the cell infeed")]
-    public static string CellSpawnWorkpiece([McpParam("Whether part is defective")] bool defective, [McpParam("Defect description")] string defectType = "Manual")
+    /// <summary>
+    /// Spawns a workpiece immediately into the cell infeed.
+    /// </summary>
+    public static string CellSpawnWorkpiece(bool defective, string defectType = "Manual")
     {
         if (Instance == null)
             return "{\"error\":\"Cell instance not running\"}";

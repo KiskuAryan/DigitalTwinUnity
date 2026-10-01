@@ -3,13 +3,7 @@
 # Get latest from the gitignore repository:
 # https://github.com/github/gitignore/blob/main/Unity.gitignore
 
-[Aa]ssets/StreamingAssets/realvirtual-MCP/python/
-[Aa]ssets/StreamingAssets/realvirtual-MCP/Lib/
-[Aa]ssets/StreamingAssets/realvirtual-MCP/tool_schema_cache.json
-[Aa]ssets/.mcp_auth_token
-[Pp]ackages/io.realvirtual.starter/
-[Pp]ackages/io.realvirtual.starter.meta
-
+# Unity generated folders
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
