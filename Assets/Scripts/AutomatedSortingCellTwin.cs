@@ -1101,8 +1101,8 @@ public class AutomatedSortingCellTwin : MonoBehaviour
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             }
 
-            // Main SCADA Monitoring Glass Panel
-            GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(28, -28), new Vector2(420, 715), new Color(0.06f, 0.08f, 0.11f, 0.94f));
+            // Main SCADA Monitoring Glass Panel (positioned below Editor Game View toolbar overlays)
+            GameObject panel = CreateUIBox("SCADA_Panel", canvasObj.transform, new Vector2(24, -65), new Vector2(420, 715), new Color(0.06f, 0.08f, 0.11f, 0.94f));
 
             // Header Title
             CreateUILabel("HeaderTitle", panel.transform, "DIGITAL TWIN  /  SORTING CELL", 20, -22, 380, 32, 20, true, Color.white);
