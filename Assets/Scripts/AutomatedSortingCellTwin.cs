@@ -56,6 +56,9 @@ public class AutomatedSortingCellTwin : MonoBehaviour
     public string jamFaultMessage = "";
     private float jamBlinkTimer = 0f;
 
+    public enum AndonState { Green, Amber, Red }
+    public AndonState currentAndonState = AndonState.Green;
+
     // --- Workpiece Tracking ---
     public class Workpiece
     {
